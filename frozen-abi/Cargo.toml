@@ -1,0 +1,10 @@
+[package]
+name = "solanal-frozen-abi-macro"
+description = "Solanal Frozen ABI Macro"
+documentation = "https://docs.rs/solana-frozen-abi-macro"
+version = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
