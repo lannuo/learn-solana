@@ -27,11 +27,11 @@ pub fn derive_abi_enum_visitor(_item: TokenStream) -> TokenStream {
     "".parse().unwrap()
 }
 
-#[cfg(RUSTC_WITH_SPECIALIZATION)]
+// #[cfg(RUSTC_WITH_SPECIALIZATION)]
 use proc_macro2::{Span, TokenStream as TokenStream2, TokenTree};
-#[cfg(RUSTC_WITH_SPECIALIZATION)]
+// #[cfg(RUSTC_WITH_SPECIALIZATION)]
 use quote::{quote, ToTokens};
-#[cfg(RUSTC_WITH_SPECIALIZATION)]
+// #[cfg(RUSTC_WITH_SPECIALIZATION)]
 use syn::{
     parse_macro_input, Attribute, Error, Fields, Ident, Item, ItemEnum, ItemStruct, ItemType,
     LitStr, Variant,
@@ -70,4 +70,33 @@ fn filter_serde_attrs(attrs: &[Attribute]) -> bool {
     }
 
     false
+}
+
+// #[cfg(RUSTC_WITH_SPECIALIZATION)]
+fn filter_allow_attrs(attrs: &mut Vec<Attribute>) {
+    attrs.retain(|attr| {
+        let ss = &attr.path().segments.first().unwrap().ident.to_string();
+        ss.starts_with("allow")
+    })
+}
+
+// #[cfg(RUSTC_WITH_SPECIALIZATION)]
+fn derive_abi_sample_enum_type(input: ItemEnum) -> TokenStream {
+    let type_name = &input.ident;
+
+    let mut sample_variant = quote! {};
+    let mut sample_variant_found = false;
+
+    for variant in &input.variants {
+        let variant_name = &variant.ident;
+        let variant = &variant.fields;
+        if *variant == Fields::Unit {
+            sample_variant.extend(quote! {
+                #type_name::#variant_name
+            });
+        } else if let Fields::Unnamed(variant_fields) =variant {
+            let mut fields = quote! {};
+            
+        }
+    }
 }
