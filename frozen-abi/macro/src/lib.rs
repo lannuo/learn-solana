@@ -94,9 +94,65 @@ fn derive_abi_sample_enum_type(input: ItemEnum) -> TokenStream {
             sample_variant.extend(quote! {
                 #type_name::#variant_name
             });
-        } else if let Fields::Unnamed(variant_fields) =variant {
+        } else if let Fields::Unnamed(variant_fields) = variant {
             let mut fields = quote! {};
-            
+            for field in &variant_fields.unnamed {
+                if !(field.ident.is_none() && field.colon_token.is_none()) {
+                    unimplemented!("tuple enum: {:?}", field);
+                }
+                let field_type = &field.ty;
+                fields.extend(quote! {
+                    <#field_type>::example();
+                });
+            }
+            sample_variant.extend(quote! {
+                #type_name::#variant_name(#fields)
+            });
+        } else if let Fields::Named(variant_fields) = variant {
+            let mut fields = quote! {};
+            for field in &variant_fields.named {
+                if field.ident.is_none() || field.colon_token.is_none() {
+                    unimplemented!("tuple enum: {:?}", field);
+                }
+                let field_type = &field.ty;
+                let field_name = &field.ident;
+                fields.extend(quote! {
+                    #field_name: <#field_type>::example(),
+                });
+            }
+            sample_variant.extend(quote! {
+                #type_name::#variant_name(#fields)
+            });
+        } else {
+            unimplemented!("{:?}", variant);
+        }
+
+        if !sample_variant_found {
+            sample_variant_found = true;
+            break;
         }
     }
+
+    if !sample_variant_found {
+        unimplemented!("empty enum");
+    }
+
+    let mut attrs = input.attrs.clone();
+    filter_allow_attrs(&mut attrs);
+    let (impl_generics, ty_generics, whre_clause) = input.generics.split_for_impl();
+
+    let result = quote! {
+        #[automatically_derived]
+        #(#attrs)*
+        impl #impl_generics ::solanal_frozen_abi::abi_example::AbiExample for #type_name #ty_generics #whre_clause {
+            fn example() -> Self {
+                ::log::info!(
+                    "AbiExample for enum: {}",
+                    std::any::type_name::<#type_name #ty_generics>()
+                );
+                #sample_variant
+            }
+        }
+    };
+    result.into()
 }
