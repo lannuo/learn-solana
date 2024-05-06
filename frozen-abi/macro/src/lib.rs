@@ -156,3 +156,99 @@ fn derive_abi_sample_enum_type(input: ItemEnum) -> TokenStream {
     };
     result.into()
 }
+
+// #[cfg(RUSTC_WITH_SPECIALIZATION)]
+fn derive_abi_sample_struct_type(input: ItemStruct) -> TokenStream {
+    let type_name = &input.ident;
+    let mut sample_fields = quote! {};
+    let fields = &input.fields;
+
+    match fields {
+        Fields::Named(_) => {
+            for field in fields {
+                let field_name = &field.ident;
+                sample_fields.extend(quote! {
+                    #field_name: AbiExample::example(),
+                });
+            }
+        }
+        Fields::Unnamed(_) => {
+            for _ in fields {
+                sample_fields.extend(quote! {
+                    AbiExample::example(),
+                });
+            }
+            sample_fields = quote! {
+                ( #sample_fields )
+            }
+        }
+        _ => unimplemented!("fields : {:?}", fields),
+    }
+
+    let mut attrs = input.attrs.clone();
+    filter_allow_attrs(&mut attrs);
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    let turbofish = ty_generics.as_turbofish();
+
+    let result = quote! {
+        #[automatically_derived]
+        #( #attrs )*
+        impl #impl_generics ::solanal_frozen_abi::abi_example::AbiExample for #type_name #ty_generics #where_clause {
+            fn example() -> Self {
+                ::log::info!(
+                    "AbiExample for struct: {}",
+                    std::any::type_name::<#type_name #ty_generics>()
+                );
+                use ::solanal_frozen_abi::abi_example::AbiExample;
+
+                #type_name #turbofish #sample_fields
+            }
+        }
+    };
+
+    result.into()
+}
+
+#[cfg(RUSTC_WITH_SPECIALIZATION)]
+#[proc_macro_derive(AbiExample)]
+pub fn derive_abi_sample(item: TokenStream) -> TokenStream {
+    let item = parse_macro_input!(item as Item);
+
+    match item {
+        Item::Struct(input) => derive_abi_sample_struct_type(input),
+        Item::Enum(input) => derive_abi_sample_enum_type(input),
+        _ => Error::new_spanned(item, "AbiSample isn't applicable; only for struct and enum")
+            .to_compile_error()
+            .into(),
+    }
+}
+
+// #[cfg(RUSTC_WITH_SPECIALIZATION)]
+fn do_derive_abi_enum_visitor(input: ItemEnum) -> TokenStream {
+    let type_name = &input.ident;
+    let mut serialized_variants = quote! {};
+    let mut variant_count: u64 = 0;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    for variant in &input.variants {
+        // Don't digest a variant with serde(skip)
+        if filter_serde_attrs(&variant.attrs) {
+            continue;
+        };
+        let sample_variant = quote_sample_variant(type_name, &ty_generics, variant);
+    }
+}
+
+#[cfg(RUSTC_WITH_SPECIALIZATION)]
+fn quote_smaple_variant(
+    type_name: &Ident,
+    ty_generics: &syn::TypeGenerics,
+    variant: &Variant,
+) -> TokenStream2 {
+    let variant_name = &variant.ident;
+    let variant = &variant.fields;
+    if *variant == Fields::Unit {
+        quote! {
+            let smaple_variant: #type_name #ty_generics = #type_name::#variant_name;
+        }
+    }
+}
