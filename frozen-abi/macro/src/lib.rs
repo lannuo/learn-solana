@@ -37,7 +37,7 @@ use syn::{
     LitStr, Variant,
 };
 
-#[cfg(RUSTC_WITH_SPECIALIZATION)]
+// #[cfg(RUSTC_WITH_SPECIALIZATION)]
 fn filter_serde_attrs(attrs: &[Attribute]) -> bool {
     fn contains_skip(tokens: TokenStream2) -> bool {
         for token in tokens.into_iter() {
@@ -235,11 +235,34 @@ fn do_derive_abi_enum_visitor(input: ItemEnum) -> TokenStream {
             continue;
         };
         let sample_variant = quote_sample_variant(type_name, &ty_generics, variant);
+        variant_count = if let Some(variant_count) = variant_count.checked_add(1) {
+            variant_count
+        } else {
+            break;
+        };
+        serialized_variants.extend(quote! {
+            #sample_variant;
+            Serialize::(&sample_variant, digester.create_enum_child()?)?;
+        });
     }
+
+    let type_str = format!("{type_name}");
+    (quote! {
+        impl #impl_generics ::solana_frozen_abi::abi_example::AbiEnumVisitor for #type_name #ty_generics #where_clause {
+            fn visit_for_abi(&self, digester: &mut ::solana_frozen_abi::abi_digester::AbiDigester) -> ::solana_frozen_abi::abi_digester::DigestResult {
+                let enum_name = #type_str;
+                use ::serde::ser::Serialize;
+                use ::solana_frozen_abi::abi_example::AbiExample;
+                digester.update_with_string(format!("enum {} (variants = {})", enum_name, #variant_count));
+                #serialized_variants
+                digester.create_child()
+            }
+        }
+    }).into()
 }
 
-#[cfg(RUSTC_WITH_SPECIALIZATION)]
-fn quote_smaple_variant(
+// #[cfg(RUSTC_WITH_SPECIALIZATION)]
+fn quote_sample_variant(
     type_name: &Ident,
     ty_generics: &syn::TypeGenerics,
     variant: &Variant,
@@ -250,5 +273,36 @@ fn quote_smaple_variant(
         quote! {
             let smaple_variant: #type_name #ty_generics = #type_name::#variant_name;
         }
+    } else if let Fields::Unnamed(variant_fields) = variant {
+        let mut fields = quote! {};
+        for field in &variant_fields.unnamed {
+            if !(field.ident.is_none() && field.colon_token.is_none()) {
+                unimplemented!();
+            }
+            let ty = &field.ty;
+            fields.extend(quote! {
+                <#ty>::example(),
+            });
+        }
+        quote! {
+            let smaple_variant: #type_name #ty_generics = #type_name::#variant_name(#fields);
+        }
+    } else if let Fields::Named(variant_fields) = variant {
+        let mut fields = quote! {};
+        for field in &variant_fields.named {
+            if field.ident.is_none() || field.colon_token.is_none() {
+                unimplemented!();
+            }
+            let field_type_name = &field.ty;
+            let field_name = &field.ident;
+            fields.extend(quote! {
+                #field_name: <#field_type_name>::example(),
+            });
+        }
+        quote! {
+            let smaple_variant: #type_name #ty_generics = #type_name::#variant_name{#fields};
+        }
+    } else {
+        unimplemented!("variant: {:?}", variant)
     }
 }
